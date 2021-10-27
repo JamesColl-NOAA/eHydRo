@@ -1,0 +1,33 @@
+Package: hyRefactor
+Type: Package
+Title: Hydrologic Network Refactoring Tools Based on HY_Features
+Version: 0.4.6
+Authors@R: person("David", "Blodgett", role = c("aut", "cre"), email = "dblodgett@usgs.gov")
+Description: A collection of tools for normalizing and changing the size of catchments.
+URL: https://github.com/dblodgett-usgs/hyrefactor
+BugReports: https://github.com/dblodgett-usgs/hyrefactor/issues
+Depends: R (>= 3.5.0)
+Imports: dplyr, sf, lwgeom, units, magrittr, data.table, raster,
+        nhdplusTools, igraph, tidyr, pbapply, xml2, rvest, httr,
+        stringr, methods
+Suggests: testthat, knitr, rmarkdown, mapview, rgdal, rgeos, snow
+Remotes: dblodgett-usgs/nhdplusTools
+License: CC0
+Encoding: UTF-8
+RoxygenNote: 7.1.1
+VignetteBuilder: knitr
+RemoteType: github
+RemoteHost: api.github.com
+RemoteRepo: hyRefactor
+RemoteUsername: dblodgett-usgs
+RemoteRef: HEAD
+RemoteSha: 4ab72f398f0af320e6a58fb47b9cecbfbd5630bb
+GithubRepo: hyRefactor
+GithubUsername: dblodgett-usgs
+GithubRef: HEAD
+GithubSHA1: 4ab72f398f0af320e6a58fb47b9cecbfbd5630bb
+NeedsCompilation: no
+Packaged: 2021-09-02 08:30:47 UTC; jimcoll
+Author: David Blodgett [aut, cre]
+Maintainer: David Blodgett <dblodgett@usgs.gov>
+Built: R 4.1.0; ; 2021-09-02 08:30:56 UTC; windows

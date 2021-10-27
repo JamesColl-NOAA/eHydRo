@@ -1,0 +1,32 @@
+adf.disk.name           Get or set the disk name of an amigaDisk object
+adf.example             An example of an amigaDisk object
+adf.file.exists         Test file or directory existsence in an
+                        amigaDisk object
+adf.file.remove         Remove a file from an amigaDisk object
+amigaBlock-class        The amigaBlock class
+amigaBlock-method       Extract block from or replace a block on an
+                        amigaDisk object
+amigaDateToRaw          Convert date time objects into raw values
+amigaDisk-class         The amigaDisk class
+amigaIntToRaw           Convert Amiga integers into raw values
+blank.amigaDOSDisk      Create blank disk with file system
+boot.block.code         Minimal executable code for a bootblock
+current.adf.dir         Get or set the current directory of an
+                        amigaDisk object
+dir.create.adf          Create a directory on an amigaDisk object
+displayRawData          Display raw data in a comprehensive way
+get.adf.file            Get a file from an amigaDisk object
+get.blockID             Get the block ID from the physical location on
+                        the disk
+get.diskLocation        Get the physical location on the disk for a
+                        specific block
+is.amigaDOS             Check if amigaDisk object is DOS formatted
+is.bootable             Check if amigaDisk object is bootable
+list.adf.files          List files in an amigaDisk directory
+print                   Print Amiga Disk File objects
+put.adf.file            Put a file onto an amigaDisk object
+rawToAmigaDate          Convert raw values into a date time object
+rawToAmigaInt           Convert raw values into Amiga integers
+rawToBitmap             Convert raw data into a bitmap or vice versa
+read.adf                Read an Amiga Disk File
+write.adf               Write an amigaDisk object to an ADF file

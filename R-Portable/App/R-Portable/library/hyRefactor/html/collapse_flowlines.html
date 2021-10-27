@@ -1,0 +1,80 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title>R: Collapse NHDPlus Network</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body>
+
+<table width="100%" summary="page for collapse_flowlines {hyRefactor}"><tr><td>collapse_flowlines {hyRefactor}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>Collapse NHDPlus Network</h2>
+
+<h3>Description</h3>
+
+<p>Refactors the NHDPlus flowline network, eliminating short and
+non-confluence flowlines. The aim of this function is to create flowpaths
+that describe a network of catchments that combines complex hydrology near
+confluences into upstream catchments and removes very short flowlines along mainstem
+flow-paths.
+</p>
+
+
+<h3>Usage</h3>
+
+<pre>
+collapse_flowlines(
+  flines,
+  thresh,
+  add_category = FALSE,
+  mainstem_thresh = NULL,
+  exclude_cats = NULL,
+  warn = TRUE
+)
+</pre>
+
+
+<h3>Arguments</h3>
+
+<table summary="R argblock">
+<tr valign="top"><td><code>flines</code></td>
+<td>
+<p>data.frame with COMID, toCOMID, LENGTHKM, Hydroseq, and LevelPathI columns</p>
+</td></tr>
+<tr valign="top"><td><code>thresh</code></td>
+<td>
+<p>numeric a length threshold (km). Flowlines shorter than this
+will be collapsed with up or downstream flowlines.</p>
+</td></tr>
+<tr valign="top"><td><code>add_category</code></td>
+<td>
+<p>boolean if combination category is desired in output, set
+to TRUE</p>
+</td></tr>
+<tr valign="top"><td><code>mainstem_thresh</code></td>
+<td>
+<p>numeric threshold for combining inter-confluence
+mainstems</p>
+</td></tr>
+<tr valign="top"><td><code>exclude_cats</code></td>
+<td>
+<p>integer vector of COMIDs to be excluded from collapse modifications.</p>
+</td></tr>
+<tr valign="top"><td><code>warn</code></td>
+<td>
+<p>boolean controls whether warning an status messages are printed</p>
+</td></tr>
+</table>
+
+
+<h3>Value</h3>
+
+<p>A refactored network with merged up and down flowlines.
+</p>
+
+
+<h3>See Also</h3>
+
+<p>The <code><a href="../../hyRefactor/help/refactor_nhdplus.html">refactor_nhdplus</a></code> function implements a complete
+workflow using 'collapse_flowlines()'.
+</p>
+
+<hr /><div style="text-align: center;">[Package <em>hyRefactor</em> version 0.4.6 <a href="00Index.html">Index</a>]</div>
+</body></html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title>R: Coverage Union</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body>
+
+<table width="100%" summary="page for gCoverageUnion {rgeos}"><tr><td>gCoverageUnion {rgeos}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>Coverage Union</h2>
+
+<h3>Description</h3>
+
+<p>GEOSCoverageUnion is an optimized union algorithm for polygonal inputs that are correctly noded and do not overlap. It will not generate an error (return NULL) for inputs that do not satisfy this constraint.</p>
+
+
+<h3>Usage</h3>
+
+<pre>
+gCoverageUnion(spgeom, byid=FALSE, id = NULL)
+</pre>
+
+
+<h3>Arguments</h3>
+
+<table summary="R argblock">
+<tr valign="top"><td><code>spgeom</code></td>
+<td>
+<p>sp object as defined in package sp</p>
+</td></tr>
+<tr valign="top"><td><code>byid</code></td>
+<td>
+<p>Logical determining if the function should be applied across subgeometries (TRUE) or the entire object (FALSE)</p>
+</td></tr>
+<tr valign="top"><td><code>id</code></td>
+<td>
+<p>Character vector defining id labels for the resulting geometries, if unspecified returned geometries will be labeled based on their parent geometries' labels.</p>
+</td></tr>
+</table>
+
+
+<h3>Author(s)</h3>
+
+<p>Roger Bivand</p>
+
+
+<h3>See Also</h3>
+
+<p><code><a href="../../rgeos/help/gUnaryUnion.html">gUnaryUnion</a></code>
+</p>
+
+
+<h3>Examples</h3>
+
+<pre>
+run &lt;- FALSE
+if (require(maptools)) run &lt;- TRUE
+if (run) {
+    nc1 &lt;- readShapePoly(system.file("shapes/sids.shp", package="maptools")[1],
+        proj4string=CRS("+proj=longlat +datum=NAD27"))
+}
+if (run) {
+    print(system.time(oU &lt;- gUnionCascaded(nc1)))
+    if (version_GEOS0() &gt;= "3.8.0") {
+        print(system.time(oCU &lt;- gCoverageUnion(nc1)))
+    }
+}
+
+</pre>
+
+<hr /><div style="text-align: center;">[Package <em>rgeos</em> version 0.5-7 <a href="00Index.html">Index</a>]</div>
+</body></html>

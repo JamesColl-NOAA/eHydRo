@@ -1,0 +1,58 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title>R: Reconcile Collapsed Flowlines</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="R.css" />
+</head><body>
+
+<table width="100%" summary="page for reconcile_collapsed_flowlines {hyRefactor}"><tr><td>reconcile_collapsed_flowlines {hyRefactor}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>Reconcile Collapsed Flowlines</h2>
+
+<h3>Description</h3>
+
+<p>Reconciles output of collapse_flowlines giving a unique ID to
+each new flowpath and providing a mapping to NHDPlus COMIDs.
+</p>
+
+
+<h3>Usage</h3>
+
+<pre>
+reconcile_collapsed_flowlines(flines, geom = NULL, id = "COMID")
+</pre>
+
+
+<h3>Arguments</h3>
+
+<table summary="R argblock">
+<tr valign="top"><td><code>flines</code></td>
+<td>
+<p>data.frame with COMID, toCOMID, LENGTHKM, LevelPathI, Hydroseq,
+and TotDASqKM columns</p>
+</td></tr>
+<tr valign="top"><td><code>geom</code></td>
+<td>
+<p>sf data.frame for flines</p>
+</td></tr>
+<tr valign="top"><td><code>id</code></td>
+<td>
+<p>character id collumn name.</p>
+</td></tr>
+</table>
+
+
+<h3>Value</h3>
+
+<p>reconciled flowpaths with new ID, toID, LevelPathID, and Hydroseq identifiers.
+Note that all the identifiers are new integer IDs. LevelPathID and Hydroseq are consistent
+with the LevelPathID and Hydroseq from the input NHDPlus flowlines.
+</p>
+
+
+<h3>See Also</h3>
+
+<p>The <code><a href="../../hyRefactor/help/refactor_nhdplus.html">refactor_nhdplus</a></code> function implements a complete
+workflow using 'reconcile_collapsed_flowlines()'.
+</p>
+
+<hr /><div style="text-align: center;">[Package <em>hyRefactor</em> version 0.4.6 <a href="00Index.html">Index</a>]</div>
+</body></html>
