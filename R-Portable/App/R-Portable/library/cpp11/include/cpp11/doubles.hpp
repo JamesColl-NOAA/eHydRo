@@ -18,6 +18,9 @@ namespace cpp11 {
 
 template <>
 inline SEXP r_vector<double>::valid_type(SEXP data) {
+  if (data == nullptr) {
+    throw type_error(REALSXP, NILSXP);
+  }
   if (TYPEOF(data) != REALSXP) {
     throw type_error(REALSXP, TYPEOF(data));
   }
@@ -130,6 +133,26 @@ inline void r_vector<double>::push_back(double value) {
 typedef r_vector<double> doubles;
 
 }  // namespace writable
+
+typedef r_vector<int> integers;
+
+inline doubles as_doubles(sexp x) {
+  if (TYPEOF(x) == REALSXP) {
+    return as_cpp<doubles>(x);
+  }
+
+  else if (TYPEOF(x) == INTSXP) {
+    integers xn = as_cpp<integers>(x);
+    size_t len = xn.size();
+    writable::doubles ret;
+    for (size_t i = 0; i < len; ++i) {
+      ret.push_back(static_cast<double>(xn[i]));
+    }
+    return ret;
+  }
+
+  throw type_error(REALSXP, TYPEOF(x));
+}
 
 template <>
 inline double na() {

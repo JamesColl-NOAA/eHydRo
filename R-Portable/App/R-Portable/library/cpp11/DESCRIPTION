@@ -1,6 +1,6 @@
 Package: cpp11
 Title: A C++11 Interface for R's C Interface
-Version: 0.3.1
+Version: 0.4.1
 Authors@R: 
     c(person(given = "Jim",
              family = "Hester",
@@ -21,7 +21,7 @@ Description: Provides a header only, C++11 interface to R's C
     to normal R function semantics and supports interaction with 'ALTREP'
     vectors.
 License: MIT + file LICENSE
-URL: https://github.com/r-lib/cpp11
+URL: https://cpp11.r-lib.org, https://github.com/r-lib/cpp11
 BugReports: https://github.com/r-lib/cpp11/issues
 Suggests: bench, brio, callr, cli, covr, decor, desc, ggplot2, glue,
         knitr, lobstr, mockery, progress, rmarkdown, scales, Rcpp,
@@ -34,12 +34,12 @@ Encoding: UTF-8
 RoxygenNote: 7.1.1
 SystemRequirements: C++11
 NeedsCompilation: no
-Packaged: 2021-06-25 19:36:55 UTC; jhester
+Packaged: 2021-11-03 15:19:35 UTC; jhester
 Author: Jim Hester [aut, cre] (<https://orcid.org/0000-0002-2739-7082>),
   Romain François [ctb],
   Benjamin Kietzman [ctb],
   RStudio [cph, fnd]
 Maintainer: Jim Hester <jim.hester@rstudio.com>
 Repository: CRAN
-Date/Publication: 2021-06-25 20:00:02 UTC
-Built: R 4.1.1; ; 2021-08-25 18:52:33 UTC; windows
+Date/Publication: 2021-11-03 16:10:05 UTC
+Built: R 4.1.0; ; 2021-11-04 03:59:00 UTC; windows

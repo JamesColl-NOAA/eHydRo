@@ -163,6 +163,7 @@ crosstab	crosstab
 crosstab,SpatRaster,missing-method	crosstab
 crs	crs
 crs,SpatRaster-method	crs
+crs,SpatRasterDataset-method	crs
 crs,SpatVector-method	crs
 crs<-	crs
 crs<-,SpatRaster,ANY-method	crs

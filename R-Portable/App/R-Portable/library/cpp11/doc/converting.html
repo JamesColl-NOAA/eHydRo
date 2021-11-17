@@ -233,6 +233,12 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <td></td>
 <td>&lt;cpp11/protect.hpp&gt;</td>
 </tr>
+<tr class="even">
+<td>checkUserInterrupt</td>
+<td>check_user_interrupt</td>
+<td></td>
+<td>&lt;cpp11/protect.hpp&gt;</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -458,7 +464,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 <div id="r-api-includes" class="section level3">
 <h3>R API includes</h3>
-<p>cpp11 conflicts with macros declared by some R headers unless the macros <code>R_NO_REMAP</code> and <code>STRICT_R_HEADERS</code> are defined. If you inlcude <code>cpp11/R.hpp</code> before any R headers these macros will be defined appropriately, otherwise you may see errors like</p>
+<p>cpp11 conflicts with macros declared by some R headers unless the macros <code>R_NO_REMAP</code> and <code>STRICT_R_HEADERS</code> are defined. If you include <code>cpp11/R.hpp</code> before any R headers these macros will be defined appropriately, otherwise you may see errors like</p>
 <blockquote>
 <p>R headers were included before cpp11 headers and at least one of R_NO_REMAP or STRICT_R_HEADERS was not defined.</p>
 </blockquote>

@@ -1,0 +1,10 @@
+[1] "-- Killing FOSSFlood --"
+Warning message:
+package 'installr' was built under R version 4.1.1 
+[1]  6064 12136
+ Rscript --slave --no-restore --no-save --no-init-file  -e Sys.sleep(0);require(tools);pskill(6064); 
+                                                                                                   0 
+Rscript --slave --no-restore --no-save --no-init-file  -e Sys.sleep(0);require(tools);pskill(12136); 
+                                                                                                   0 
+Loading required package: tools
+Loading required package: tools
