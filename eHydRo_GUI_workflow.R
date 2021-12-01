@@ -81,6 +81,7 @@ memory.size(max = TRUE)
 memory.size()
 
 NWM_channel_geom <- ncdf4::nc_open(file.path(basedir,"base_data","Route_Link.nc"))
+NWM_channel_routelink <- ncdf4::nc_open(file.path(basedir,"base_data","RouteLink_CONUS.nc"))
 
 ##############################################################################################################################
 ##############################################################################################################################
@@ -150,6 +151,7 @@ if(new_survey) {
   xx$eHydro_survey_footprints <- sf::read_sf(file.path(snapshot_dir, "SurveyJob.shp")) %>%
     sf::st_make_valid() %>%
     sf::st_transform(sf::st_crs(6349))
+  # xx$survey_tiles <- sf::read_sf(file.path(snapshot_dir, "full_processing_tiles.shp"))
   xx$survey_tiles <- sf::read_sf(file.path(snapshot_dir, "processing_tiles.shp"))
   
 }
@@ -861,6 +863,29 @@ mosaic_surfaces <- function(type_string) {
 
 
 #///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+# ----- Merge CWMS data -------------------------------------------------------------------------------
+#///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+generate_merged_CWMS_survey <- function() {
+  print('mergeing cwms data')
+  step_start_time <- Sys.time()
+  cwms_survey_files <- list.files(path = file.path(snapshot_dir,'cwms','tmp'),pattern = "z.shp", full.names = TRUE, recursive = TRUE)
+  cwms_survey = list(length=nrow(cwms_survey_files))
+  
+  fn_open_shapefiles <- function(file_path) { return( sf::read_sf(file_path) )}
+  cwms_survey <- lapply(cwms_survey_files,fn_open_shapefiles)
+  cwms_cross_sections <- do.call(rbind, cwms_survey)
+  cwms_cross_sections <- sf::st_transform(cwms_cross_sections, sf::st_crs(6349))
+  step_run_time <- difftime(Sys.time(), step_start_time, units = "mins")
+  print(paste0("cwms data extracted, merged, and projected in ",round(step_run_time, digits = 2), " minutes"))
+  return(cwms_cross_sections)
+}
+# cwms_cross_section_data <- generate_merged_CWMS_survey()
+##############################################################################################################################
+##############################################################################################################################
+
+
+
+#///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 # ----- Cut cross sections -------------------------------------------------------------------------------
 #///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 # older and trash?
@@ -985,7 +1010,53 @@ cut_simple_cross_sections <- function(tile_id,cross_section_locations=NULL) {
 #reduce_bathy_surface <- function(AOI_tiles_with_paths,reducer = min) {
 #)
 
-cut_simple_cross_sections_from_full <- function(ras_path,cross_section_locations=NULL) {
+pull_cross_sections_from_cwms_by_comid <- function(list_of_comids) {
+  # list_of_comids <- cwms_enabled_coms
+  print('Generating CWMS cross sections')
+  step_start_time <- Sys.time()
+  
+  cwms_cross_section_data <- generate_merged_CWMS_survey()
+  
+  comid_midpoints <- list(length=nrow(list_of_comids))
+  for (i in 1:nrow(list_of_comids)) {
+    comid_midpoints[[i]] <- rgeos::gInterpolate(as(list_of_comids[i,], "Spatial"), d=0.5, normalized = TRUE) %>% 
+      sf::st_as_sf()
+  }
+  comid_midpoints <- sf::st_as_sf(data.table::rbindlist(comid_midpoints)) %>% 
+    sf::st_set_crs(sf::st_crs(6349))
+  cwms_index <- sf::st_nearest_feature(comid_midpoints, cwms_cross_section_data)
+  cwms_cross_sections <- dplyr::slice(cwms_cross_section_data,cwms_index)
+  cwms_cross_sections$comid <- list_of_comids$ID        
+
+  cwms_extract_point_list <- list(length=nrow(cwms_cross_sections))
+  for (i in 1:nrow(cwms_cross_sections)) {
+    this_cross_section_line <- cwms_cross_sections[i,]
+    
+    this_cross_section_line$xid <- j+i
+    this_cross_section_line$xid_length <- as.numeric(sf::st_length(sf::st_zm(this_cross_section_line, drop = TRUE, what = "ZM")))
+    
+    cross_section_midpoint <- sf::st_intersection(this_cross_section_line, stream_lines[stream_lines$ID==this_cross_section_line$comid,])
+    if(nrow(cross_section_midpoint)==0) {
+      print('CWIMS cross sections do not intersect here')
+      next
+    }
+    this_cross_section_line$comid_rel_dist_ds <- rgeos::gProject(as(stream_lines[stream_lines$ID==this_cross_section_line$comid,],"Spatial"), as(sf::st_cast(cross_section_midpoint,"POINT"),"Spatial"), normalized=TRUE)[[1]]
+    
+    cwms_extract_point <- sf::st_cast(this_cross_section_line,"POINT")
+    
+    relative_distance_along_line_to_midpoint <- rgeos::gProject(as(sf::st_zm(this_cross_section_line, drop = TRUE, what = "ZM"),"Spatial"), as(sf::st_cast(cross_section_midpoint,"POINT"),"Spatial"), normalized=TRUE)
+    cwms_extract_point$xid_rel_dist <- rgeos::gProject(as(sf::st_zm(this_cross_section_line, drop = TRUE, what = "ZM"),"Spatial"), as(sf::st_cast(sf::st_zm(this_cross_section_line, drop = TRUE, what = "ZM"),"POINT"),"Spatial"), normalized=TRUE)
+
+    cwms_extract_point$xid_d <- (cwms_extract_point$xid_length * cwms_extract_point$xid_rel_dist) - (relative_distance_along_line_to_midpoint * cwms_extract_point$xid_length)
+    cwms_extract_point_list[[i]] <- cwms_extract_point
+  }
+  print('merging cwms points')
+  # cwms_extract_point_list = do.call(rbind, cwms_extract_point_list)
+  cwms_extract_point_list = data.table::rbindlist(cwms_extract_point_list)
+  return(cwms_extract_point_list)
+}
+
+cut_simple_cross_sections_from_eHydro <- function(ras_path,cross_section_locations=NULL) {
 
   # Input parsing
   step_start_time <- Sys.time()
@@ -1072,10 +1143,14 @@ cut_simple_cross_sections_from_full <- function(ras_path,cross_section_locations
     cross_section_vector[[i]]$xid_length <- geosphere::lengthLine(as(cross_section_vector[[i]],"Spatial"))
     little_lines <- sf::st_segmentize(cross_section_vector[[i]],2)
     extract_points <- sf::st_cast(little_lines,"POINT")
+    
+    # xid runner
+    j <<- i
+    
     extract_points$xid <- i
     extract_points$comid_rel_dist_ds <- 0.5
     extract_points$xid_rel_dist <- rgeos::gProject(sf::as_Spatial(cross_section_vector[[i]]), sf::as_Spatial(extract_points), normalized=TRUE)
-    extract_points$xid_d <- (extract_points$xid_length * extract_points$xid_rel_dist) - (0.5* extract_points$xid_length)
+    extract_points$d <- (extract_points$xid_length * extract_points$xid_rel_dist) - (0.5* extract_points$xid_length)
     extract_points_list[[i]] <- extract_points
   }
   
@@ -1102,7 +1177,7 @@ cut_simple_cross_sections_from_full <- function(ras_path,cross_section_locations
   # extract_points$z <-  raster::extract(surface, extract_points,method='simple')
   # extract_points$z <-  raster::extract(surface, cross_sections,method='bilinear')
   # extract_points$relative_distance <- rgeos::gProject(sf::as_Spatial(cross_sections), sf::as_Spatial(extract_points), normalized=TRUE)
-  extract_points$d <- (extract_points$xid_rel_dist * extract_points$xid_length) #- (0.5* extract_points$line_distance)
+  extract_points$xid_d <- (extract_points$xid_rel_dist * extract_points$xid_length) #- (0.5* extract_points$line_distance)
   
   # extract_points$comid
   #NWM_channel_geom <- ncdf4::nc_open(file.path(basedir,"base_data","Route_Link.nc"))
@@ -1119,7 +1194,21 @@ cut_simple_cross_sections_from_full <- function(ras_path,cross_section_locations
   return(extract_points_list)
 }
 
-cross_section_points <- cut_simple_cross_sections_from_full(file.path(snapshot_dir,"final_surface.tif"),cross_section_locations='miss') 
+##############################################################################################################################
+cross_section_points <- cut_simple_cross_sections_from_eHydro(file.path(snapshot_dir,"final_surface.tif"),cross_section_locations='miss') 
+
+stream_lines = sf::read_sf(file.path(basedir,"processed_data","nwm_streams","nwm_streams.shp")) %>% 
+  sf::st_transform(sf::st_crs(6349))
+cwms_cross_section_data <- generate_merged_CWMS_survey()
+cwms_enabled_coms <- stream_lines[cwms_cross_section_data,]
+
+cwms_cross_section_points <- pull_cross_sections_from_cwms_by_comid(cwms_enabled_coms)
+row.names(cwms_cross_section_points) <- NULL
+cwms_cross_section_points$source <- 2
+cwms_cross_section_points$x <- unlist(map(cwms_cross_section_points$geometry,1))
+cwms_cross_section_points$y <- unlist(map(cwms_cross_section_points$geometry,2))
+cwms_cross_section_points$z <- unlist(map(cwms_cross_section_points$geometry,3))
+##############################################################################################################################
 
 cross_section_points <- cross_section_points[complete.cases(cross_section_points$z),]
 row.names(cross_section_points) <- NULL
@@ -1129,7 +1218,17 @@ cross_section_points$y <- unlist(map(cross_section_points$geometry,2))
 ##############################################################################################################################
 ##############################################################################################################################
 
+cross_section_points_df <- cross_section_points %>% 
+  sf::st_drop_geometry() %>% 
+  dplyr::select(-one_of("geometry","xid_rel_dist")) %>% 
+  data.table::setDT() %>% 
+  data.table::setcolorder(c("xid", "xid_length", "comid",'comid_rel_dist_ds','xid_d','x','y','z','source'))
+cwms_cross_section_points_df <- cwms_cross_section_points %>% 
+  dplyr::select(-one_of("geometry","xid_rel_dist","FID")) %>% 
+  data.table::setcolorder(c("xid", "xid_length", "comid",'comid_rel_dist_ds','xid_d','x','y','z','source'))
 
+export_dbase <- do.call(rbind, list(cwms_cross_section_points_df, cross_section_points_df))
+export_dbase <- export_dbase[complete.cases(export_dbase$z),]
 
 #///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 # ----- View and export -------------------------------------------------------------------------------
@@ -1156,7 +1255,7 @@ ggplot(data = extract_points_list[extract_points_list$comid==18055920,], aes(d, 
 # database export example
 file <- file.path(snapshot_dir,paste0('eHydro_ned_cross_sections_',gsub("-","_",Sys.Date()),'.nc'))
 cross_section_points <- cross_section_points %>% sf::st_drop_geometry()
-
+cross_section_points <- export_dbase
 nc <- RNetCDF::create.nc(file)
 RNetCDF::dim.def.nc(nc, "xid", unlim=TRUE)
 
@@ -1192,10 +1291,65 @@ RNetCDF::var.put.nc(nc, "y", cross_section_points$y)
 RNetCDF::var.put.nc(nc, "z", cross_section_points$z)
 RNetCDF::var.put.nc(nc, "source", cross_section_points$source)
 
-att.put.nc(nc, "NC_GLOBAL", "title", "NC_CHAR", "Data from Foo")
+RNetCDF::att.put.nc(nc, "NC_GLOBAL", "title", "NC_CHAR", "Natural cross section data for inland routing task")
+RNetCDF::att.put.nc(nc, "NC_GLOBAL", "date_scraped", "NC_CHAR", "eHydro data scraped on 2021-11-01")
+RNetCDF::att.put.nc(nc, "NC_GLOBAL", "date_generated", "NC_CHAR", paste("database generated on ",gsub("-","_",Sys.Date())))
+RNetCDF::att.put.nc(nc, "NC_GLOBAL", "code_repo", "NC_CHAR", 'https://github.com/JamesColl-NOAA/eHydRo')
+RNetCDF::att.put.nc(nc, "NC_GLOBAL", "contact", "NC_CHAR", "james.coll@noaa.gov")
+RNetCDF::att.put.nc(nc, "NC_GLOBAL", "projection", "NC_CHAR", "epsg:6349")
+RNetCDF::att.put.nc(nc, "xid", "title", "NC_CHAR", "cross section ID")
+RNetCDF::att.put.nc(nc, "xid", "interpretation", "NC_CHAR", "a unique cross section id (fid)")
+RNetCDF::att.put.nc(nc, "xid_length", "title", "NC_CHAR", "cross section ID length")
+RNetCDF::att.put.nc(nc, "xid_length", "interpretation", "NC_CHAR", "the total length (in meters) of a cross section")
+RNetCDF::att.put.nc(nc, "xid_length", "unit", "NC_CHAR", "meters")
+RNetCDF::att.put.nc(nc, "comid", "title", "NC_CHAR", "Spatially assosiated COMID")
+RNetCDF::att.put.nc(nc, "comid", "interpretation", "NC_CHAR", "the comid from the NHD that the cross section intersects: should join with the routelink link field")
+RNetCDF::att.put.nc(nc, "comid_rel_dist_ds", "title", "NC_CHAR", "the relative (0-1) distance from the start of the comid that the cross section crosses at")
+RNetCDF::att.put.nc(nc, "comid_rel_dist_ds", "interpretation", "NC_CHAR", "the relative (0-1) distance from the start of the comid that the cross section crosses at")
+RNetCDF::att.put.nc(nc, "comid_rel_dist_ds", "unit", "NC_CHAR", "percentage (0-1)")
+RNetCDF::att.put.nc(nc, "xid_d", "title", "NC_CHAR", "Cross section distance")
+RNetCDF::att.put.nc(nc, "xid_d", "interpretation", "NC_CHAR", "The distance (meters from the left-most point on the cross section) of the observation.  0 is centered on the intersection of the cross section and the NHD reach")
+RNetCDF::att.put.nc(nc, "xid_d", "unit", "NC_CHAR", "meters")
+RNetCDF::att.put.nc(nc, "x", "title", "NC_CHAR", "x")
+RNetCDF::att.put.nc(nc, "x", "interpretation", "NC_CHAR", "x coordinate (Longitude)")
+RNetCDF::att.put.nc(nc, "x", "unit", "NC_CHAR", "meters")
+RNetCDF::att.put.nc(nc, "x", "projection", "NC_CHAR", "epsg:6349")
+RNetCDF::att.put.nc(nc, "y", "title", "NC_CHAR", "y")
+RNetCDF::att.put.nc(nc, "y", "interpretation", "NC_CHAR", "y coordinate (Latitude)")
+RNetCDF::att.put.nc(nc, "y", "unit", "NC_CHAR", "degree")
+RNetCDF::att.put.nc(nc, "y", "projection", "NC_CHAR", "epsg:6349")
+RNetCDF::att.put.nc(nc, "z", "title", "NC_CHAR", "z")
+RNetCDF::att.put.nc(nc, "z", "interpretation", "NC_CHAR", "vertical elevation (meters)")
+RNetCDF::att.put.nc(nc, "z", "unit", "NC_CHAR", "meters")
+RNetCDF::att.put.nc(nc, "z", "projection", "NC_CHAR", "epsg:6349")
+RNetCDF::att.put.nc(nc, "source", "title", "NC_CHAR", "source")
+RNetCDF::att.put.nc(nc, "source", "interpretation", "NC_CHAR", "The source of the data: 1=eHydro, 2=CWMS")
 
 RNetCDF::close.nc(nc)
 unlink(nc)
+
+file <- file.path(snapshot_dir,paste0('tmp_eHydro_ned_cross_sections_',gsub("-","_",Sys.Date()),'.nc'))
+cross_section_points_nc <- ncdf4::nc_open(file)
+cross_section_points$comid <- ncdf4::ncvar_get(cross_section_points_nc,varid = 'eHydro_ned_cross_sections_2021_11_08_field_comid')  ross_section_points_nc
+attributes(cross_section_points_nc$var)$names
+lon <- ncdf4::ncvar_get(cross_section_points_nc,"comid","ogr_field_name")
+
+# View
+mapview::mapview(cross_section_points[cross_section_points$comid==18055920,])
+unique(extract_points$comid)
+unique(extract_points[complete.cases(extract_points$z),]$comid)
+ggplot(data = extract_points_list[extract_points_list$comid==18055920,], aes(d, z, color = z))+
+  geom_point()+
+  theme_light()+
+  scale_color_gradientn(colors = terrain.colors(10))+
+  labs(x = "Distance along profile [m]", y = "Elevation [m]",
+       color = "Elevation [m]")
+##############################################################################################################################
+##############################################################################################################################
+
+# database export example
+file <- file.path(snapshot_dir,paste0('eHydro_ned_cross_sections_',gsub("-","_",Sys.Date()),'.nc'))
+
 
 ##############################################################################################################################
 ##############################################################################################################################
@@ -1220,16 +1374,6 @@ append_NWM_channel_geom <- function(database) {
 
 
 
-#///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-# ----- Merge CWMS data -------------------------------------------------------------------------------
-#///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-generate_merged_CWMS_survey <- function() {
-  list_files
-  
-  return(TRUE)
-}
-##############################################################################################################################
-##############################################################################################################################
 
 
 
@@ -1274,6 +1418,11 @@ generate_LWRP <- function(yyyy) {
 ##############################################################################################################################
 
 for (i in 1:nrow(xx$survey_tiles)) {
+  
+  if(i %in% list(57,58,59,60,61,62,63,64,65,66)) {
+    next
+  }
+  
   # i=1
   tile <- xx$survey_tiles[i,]
   processing_tile_id <- tile$tile_id
@@ -1372,4 +1521,13 @@ wrangle_cross_sections_from_eHydro(xx$survey_tiles)
 
 
 
+fully_run_tiles <- list.files(path = snapshot_dir, pattern = "merged_surface.tif", full.names = TRUE, recursive = TRUE)
 
+
+cwms_tiles <- xx$survey_tiles[cwms_cross_section_data,] 
+eHydro_tiles <- xx$survey_tiles[xx$survey_tiles$tile_id %in% list(78247,78947,79296,79647,79996,80347,80696,81047,81396,82096,82447,82796,83147,83496,83846,84196,84546,84896,85247,85596,85947,86647,86996,86997,87347,87697),]
+
+eHydro_tiles$val <- 1
+cwms_tiles$val <- 2
+AOI <- do.call(rbind, list(eHydro_tiles, cwms_tiles))
+mapview::mapview(AOI,zcol='val')
