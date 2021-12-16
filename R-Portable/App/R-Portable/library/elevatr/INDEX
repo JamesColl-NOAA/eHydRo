@@ -1,6 +1,0 @@
-elevatr                 Access elevation data from the web
-get_elev_point          Get Point Elevation
-get_elev_raster         Get Raster Elevation
-lake                    SpatialPolygonsDataFrame of Lake Sunapee
-pt_df                   Small data frame of xy locations
-sp_big                  SpatialPoints of random points
