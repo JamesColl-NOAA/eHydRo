@@ -1,0 +1,18 @@
+Package: eHydRo
+Title: Wrangle eHydro Data
+Version: 0.0.0.9000
+Authors@R: 
+    c(person(given = "James", "Coll", , email = "first.last@example.com", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID")),
+      person(given = "Mike", family = "Johnson", role = "ctb",
+           comment = c(ORCID = "0000-0002-5288-8350")))
+Description: An R based eHydro wrangler to efficiently and automatically download and splice in bathymetry data to elevation and cut cross sections for use in routing modules (t-route).
+Depends: R (>= 3.4)
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.2
+Imports: 
+    httr,
+    sf
