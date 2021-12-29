@@ -30,6 +30,8 @@
 # install.packages("RNetCDF")
 # install.packages("ncdf4")
 # install.packages("gdalUtils")
+# install.packages("BiocManager")
+# BiocManager::install("rhdf5")
 
 library(tidyverse)
 library(geosphere)
@@ -44,6 +46,10 @@ library(lubridate)
 library(elevatr)
 library(interp)
 library(raster)
+library(rhdf5)
+library(stringi)
+library(stringr)
+
 # library(velox)
 
 ##############################################################################################################################
@@ -52,165 +58,15 @@ library(raster)
 # devtools::install_github("jmcoll/eHydRo")
 # library(eHydRo)
 
-survey_path <- 'G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01'
-survey_path <- 'C:/Users/jimma/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01'
-
-xx = establish_survey_dir(survey_path)
-xx
-#--
-# $eHydro_survey_footprints
-# Simple feature collection with 73706 features and 24 fields (with 8 geometries empty)
-# Geometry type: GEOMETRY
-# Dimension:     XY
-# Bounding box:  xmin: -166.5569 ymin: 13.47747 xmax: 145.1347 ymax: 64.50316
-# Geodetic CRS:  NAD83(2011) + NAVD88 height
-# # A tibble: 73,706 x 25
-# objectid surveyjobi   sdsid   sdsfeature sdsmetadat  surveytype channelare dateupload usacedistr surveydate
-# *    <int> <chr>        <chr>   <chr>      <chr>       <chr>      <chr>      <date>     <chr>      <date>    
-# 1    10093 CR_ND_BL1_2~ NA      BARKLEY L~ NA          CS         CELRN_CR_~ 2019-05-24 CELRN      2018-09-26
-# 2    11357 CR_ND_OLD_2~ NA      OLD HICKO~ NA          CS         CELRN_CR_~ 2019-05-24 CELRN      2018-07-26
-# 3    16398 GH_03_COC_2~ NA      CROSSOVER~ NA          NS         CENWS_GH_~ 2018-02-02 CENWS      2017-11-06
-
-# $survey_tiles
-# Simple feature collection with 111 features and 1 field
-# Geometry type: POLYGON
-# Dimension:     XY
-# Bounding box:  xmin: -91.75556 ymin: 28.9363 xmax: -89.19433 ymax: 34.12538
-# Geodetic CRS:  NAD83(2011) + NAVD88 height
-# # A tibble: 111 x 2
-#   tile_id                                                                                     geometry
-#   <int>                                                                                <POLYGON [°]>
-# 1   87697 ((-90.99162 34.07991, -90.95554 34.12538, -90.88941 34.12248, -90.85945 34.07412, -90.895...
-# 2   87347 ((-91.09372 34.03724, -91.05771 34.08275, -90.99162 34.07991, -90.96161 34.03157, -90.997...
-# 3   86997 ((-90.99765 33.98609, -90.96161 34.03157, -90.89557 34.02868, -90.86564 33.98031, -90.901...
-                                      
-#--
-process_survey_tiles(survey_path)
-### ...
-
-
-bulk_generate_hecras_geo(survey_path)
-# ras_data_store <- utils::read.table(file.path(survey_path,'RAS_1D_data.csv'))
-# ras_xs_database <- ras_storage_to_line(ras_data_store)
-# ras_xs_database <- ras_xs_database %>%
-#   sf::st_set_crs(2274) %>%
-#   sf::st_transform(sf::st_crs(6349))
-# ras_return_to_point_database <- ras_line_to_point(ras_point_database)
-ras_database <- utils::read.table(file.path(survey_path,'RAS_1D_data.csv'))
-ras_dbase_line <- ras_store_to_line(ras_database)
-ras_dbase_point <- ras_store_to_line(ras_database)
-
-# load in network
-NWM_v2_1_features <- sf::st_read(file.path(survey_path,'NWM_v2_1_Features.gpkg'),layer = 'NHDFlowline_Network') %>%
-  sf::st_transform(sf::st_crs(6349))
-NWM_v2_1_features = NWM_v2_1_features[!sf::st_is_empty(NWM_v2_1_features),,drop=FALSE]
-
-# load in NWM 2.1 representation
-RouteLink <- 'G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01/RouteLink_CONUS.nc'
-
-# Which comid's are we augmenting with 1D cross sections?
-ras_enabled_coms <- NWM_v2_1_features[ras_dbase_line,]
-mapview::mapviewOptions(fgb = FALSE)
-mapview::mapview(list(ras_enabled_coms,ras_dbase_line))
-
-# How do we want to reduce these to a singular profile?
-xs_from_1D <- pull_cross_section_points_from_ras_by_comid_distance(survey_path,ras_enabled_coms,0.5)
-
-# What does that first selections points look like?
-# ras_enabled_coms
-ggplot(data = xs_from_1D[xs_from_1D$comid==19692849,], aes(xid_d, z, color = z))+
-  geom_point()+
-  theme_light()+
-  scale_color_gradientn(colors = terrain.colors(10))+
-  labs(x = "Distance along profile [m]", y = "Elevation [m]", color = "Elevation [m]")
-
-# prep and export
-xs_from_1D_df <- xs_from_1D %>%
-  dplyr::select(-one_of("geometry","xid_rel_dist")) %>%
-  data.table::setDT() %>%
-  data.table::setcolorder(c("xid", "xid_length", "comid",'comid_rel_dist_ds','xid_d','x','y','z','n','source'))
-# cwms_cross_section_points_df <- cwms_cross_section_points %>%
-#   dplyr::select(-one_of("geometry","xid_rel_dist","FID")) %>%
-#   data.table::setcolorder(c("xid", "xid_length", "comid",'comid_rel_dist_ds','xid_d','x','y','z','source'))
-export_surveys(survey_path,xs_from_1D_df) 
-
-
-
 ##############################################################################################################################
 ##############################################################################################################################
-#' establishes survey directory
-#' @description Point at a directory to load in base establish (create) the folder and base data needed for eHydro to run or load in a past processed 
-#' database Based on the presence of another active survey snapshot (defined as an established ehdroor not
-#' @param my_location Path on local system
-#' @return list object containing the spatial footprints of surveys and a list of tiles over which to process
+#' @title Set a working directiory
+#' @description Probably bad practice, but ehydro is a dynamic database so when providing reproducable science we can include a snapshot of the database to work from.
+#' It can be downloaded from here: http://nco.sourceforge.net/#Source
+#' @return a list containing the list of tiles 
+#' @importFrom sys exec_internal
 #' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
-ras_store_to_point = function(ras_storeage) {
-  sf_points <- sf::st_as_sf(ras_database, coords = c("x", "y", "z"), crs = 2274) %>%
-    sf::st_transform(sf::st_crs(6349))
-  return(sf_points)
-}
-
-##############################################################################################################################
-##############################################################################################################################
-#' establishes survey directory
-#' @description Point at a directory to load in base establish (create) the folder and base data needed for eHydro to run or load in a past processed 
-#' database Based on the presence of another active survey snapshot (defined as an established ehdroor not
-#' @param my_location Path on local system
-#' @return list object containing the spatial footprints of surveys and a list of tiles over which to process
-#' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
-ras_store_to_line = function(ras_storeage) {
-  xid_list <- unique(ras_storeage$xid)
-  
-  ls_geoz_extract <- function(x) {
-    sf_return <- sfheaders::sf_linestring(
-      obj = x
-      , x = "x"
-      , y = "y"
-      , z = "z"
-      , linestring_id = "xid"
-      , keep = FALSE
-    ) %>% sf::st_sf() %>%
-      sf::st_cast()
-    return(sf_return)
-  }
-  sf_cross_section_line_z <- c()
-  for(k in xid_list) {
-    sf_cross_section_line_z <- rbind(sf_cross_section_line_z,ls_geoz_extract(ras_point_database[ras_point_database$xid==k,]))
-  }
-  sf_cross_section_line_z <- sf_cross_section_line_z %>% sf::st_set_crs(2274) %>% sf::st_transform(sf::st_crs(6349))
-  
-  return(sf_cross_section_line_z)
-}
-
-##############################################################################################################################
-##############################################################################################################################
-#' establishes survey directory
-#' @description Point at a directory to load in base establish (create) the folder and base data needed for eHydro to run or load in a past processed 
-#' database Based on the presence of another active survey snapshot (defined as an established ehdroor not
-#' @param my_location Path on local system
-#' @return list object containing the spatial footprints of surveys and a list of tiles over which to process
-#' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
-ras_line_to_point = function(ras_line_database) {
-  return(sf::st_cast(ras_line_database,"POINT"))
-}
-
-
-##############################################################################################################################
-##############################################################################################################################
-#' establishes survey directory
-#' @description Point at a directory to load in base establish (create) the folder and base data needed for eHydro to run or load in a past processed 
-#' database Based on the presence of another active survey snapshot (defined as an established ehdroor not
-#' @param my_location Path on local system
-#' @return list object containing the spatial footprints of surveys and a list of tiles over which to process
-#' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
+# establish_survey_dir(my_location) {
 establish_survey_dir = function(my_location) {
   xx <- list()
 
@@ -297,6 +153,60 @@ elevation_wrapper_for_tile = function(survey_location, TILE_ID, elevation_source
   print(paste('Processing elevation for tile',tile_id))
   # small buffer around feature?
 
+  if(elevation_source=="AWS") {
+      elevatr_NED <- elevatr::get_elev_raster(AOI, z = 14, clip = 'locations', override_size_check=TRUE)
+  
+      if(is.null(elevatr_NED)) {
+        print('No NED within the tile')
+        return(FALSE)
+      }
+  
+    print('reprojecting and saving data')
+    raster::writeRaster(elevatr_NED,filename=file.path(survey_location,paste0('tile_',tile_id),"NED_4326.tif"),bylayer=TRUE,format="GTiff")
+    gdalUtilities::gdalwarp(srcfile = file.path(survey_location,paste0('tile_',tile_id),"NED_4326.tif"),
+                            dstfile = file.path(survey_location,paste0('tile_',tile_id),"NED.tif"), t_srs = sf::st_crs(6349), r = "bilinear")
+  
+    #Toss tmp ned file.
+    file.remove(file.path(survey_location,paste0('tile_',tile_id),"NED_4326.tif"))
+  
+    step_run_time <- difftime(Sys.time(), step_start_time, units = "mins")
+    print(paste0("NED processed in ",round(step_run_time, digits = 2), " minutes"))
+    return(TRUE)
+  }
+  return(FALSE)
+}
+elevatr_aws_wrapper_for_tile('G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01',86647)
+# breaks: 79647
+
+# TO DO
+##############################################################################################################################
+##############################################################################################################################
+#' @title elevatr AWS wrapper for tile
+#' @description elevatr package wrapper for tile. Given a tile, return the NAD
+#' It can be downloaded from here: http://nco.sourceforge.net/#Source
+#' @return a boolean condition
+#' @importFrom sys exec_internal
+#' @examples
+#' check_nco()
+#' @export
+# elevatr_wrapper_for_tile(survey_location, AOI or TILE_ID) {
+elevatr_aws_wrapper_for_tile = function(survey_location, TILE_ID) {
+  print("-- Generating terrain surface --")
+
+  dir.create(file.path(survey_location,paste0('tile_',id)), showWarnings = FALSE)
+
+  # Input parsing
+  step_start_time <- Sys.time()
+  if(is.data.frame(tile_id)) {
+    AOI <- tile_id
+    tile_id <- AOI$tile_id
+  } else {
+    AOI <- xx$survey_tiles[xx$survey_tiles$tile_id==tile_id,]
+  }
+
+  print(paste('Processing elevation for tile',tile_id))
+  # small buffer around feature?
+
   elevatr_NED <- elevatr::get_elev_raster(AOI, z = 14, clip = 'locations', override_size_check=TRUE)
 
   if(is.null(elevatr_NED)) {
@@ -316,7 +226,7 @@ elevation_wrapper_for_tile = function(survey_location, TILE_ID, elevation_source
   print(paste0("NED processed in ",round(step_run_time, digits = 2), " minutes"))
   return(TRUE)
 }
-
+elevatr_aws_wrapper_for_tile('G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01',86647)
 
 ##############################################################################################################################
 ##############################################################################################################################
@@ -365,55 +275,7 @@ elevatr_aws_wrapper_for_tile = function(survey_location, TILE_ID) {
   print(paste0("NED processed in ",round(step_run_time, digits = 2), " minutes"))
   return(TRUE)
 }
-
-##############################################################################################################################
-##############################################################################################################################
-#' @title elevatr AWS wrapper for tile
-#' @description elevatr package wrapper for tile. Given a tile, return the NAD
-#' It can be downloaded from here: http://nco.sourceforge.net/#Source
-#' @return a boolean condition
-#' @importFrom sys exec_internal
-#' @examples
-#' check_nco()
-#' @export
-# elevatr_wrapper_for_tile(survey_location, AOI or TILE_ID) {
-elevatr_aws_wrapper_for_tile = function(survey_location, TILE_ID) {
-  print("-- Generating terrain surface --")
-
-  dir.create(file.path(survey_location,paste0('tile_',id)), showWarnings = FALSE)
-
-  # Input parsing
-  step_start_time <- Sys.time()
-  if(is.data.frame(tile_id)) {
-    AOI <- tile_id
-    tile_id <- AOI$tile_id
-  } else {
-    AOI <- xx$survey_tiles[xx$survey_tiles$tile_id==tile_id,]
-  }
-
-  print(paste('Processing elevation for tile',tile_id))
-  # small buffer around feature?
-
-  elevatr_NED <- elevatr::get_elev_raster(AOI, z = 14, clip = 'locations', override_size_check=TRUE)
-
-  if(is.null(elevatr_NED)) {
-    print('No NED within the tile')
-    return(FALSE)
-  }
-
-  print('reprojecting and saving data')
-  raster::writeRaster(elevatr_NED,filename=file.path(survey_location,paste0('tile_',tile_id),"NED_4326.tif"),bylayer=TRUE,format="GTiff")
-  gdalUtilities::gdalwarp(srcfile = file.path(survey_location,paste0('tile_',tile_id),"NED_4326.tif"),
-                          dstfile = file.path(survey_location,paste0('tile_',tile_id),"NED.tif"), t_srs = sf::st_crs(6349), r = "bilinear")
-
-  #Toss tmp ned file.
-  file.remove(file.path(survey_location,paste0('tile_',tile_id),"NED_4326.tif"))
-
-  step_run_time <- difftime(Sys.time(), step_start_time, units = "mins")
-  print(paste0("NED processed in ",round(step_run_time, digits = 2), " minutes"))
-  return(TRUE)
-}
-
+elevatr_aws_wrapper_for_tile('G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01',86647)
 
 ##############################################################################################################################
 ##############################################################################################################################
@@ -426,7 +288,7 @@ elevatr_aws_wrapper_for_tile = function(survey_location, TILE_ID) {
 #' check_nco()
 #' @export
 # aggregate_eHydro_footprints_within_AOI(survey_location, AOI or TILE_ID) {
-aggregate_eHydro_footprints_within_AOI <- function(survey_location, AOI, TILE_ID, tile_feature_subset = NULL) {
+aggregate_eHydro_footprints_within_AOI <- function(survey_location, AOI, TILE_ID,tile_feature_subset = NULL) {
   print("-- Appending surveys in 'first in time across space' --")
 
   # Input parsing
@@ -491,6 +353,9 @@ aggregate_eHydro_footprints_within_AOI <- function(survey_location, AOI, TILE_ID
 
   return(tile_fishnet)
 }
+# tile_fishnet <- aggregate_eHydro_footprints_within_AOI(xx$survey_tiles[xx$survey_tiles$tile_id==id,])
+# mapview::mapview(list(xx$survey_tiles[xx$survey_tiles$tile_id==id,],tile_fishnet,xx$eHydro_survey_footprints %>% sf::st_filter(tile_fishnet)))
+# mapview::mapview(xx$survey_tiles[xx$survey_tiles$tile_id==id]+tile_fishnet)
 
 
 ##############################################################################################################################
@@ -577,7 +442,8 @@ append_eHydro_files_to_AOI <- function(AOI_tiles) {
 
   return(AOI_tiles)
 }
-
+# tile_fishnet_survey <- append_eHydro_files_to_AOI(tile_fishnet)
+# tile_fishnet_survey
 
 
 ##############################################################################################################################
@@ -1003,6 +869,7 @@ mosaic_bathy_surface <- function(AOI_tiles_with_paths,tile_id) {
   return(NULL)
 }
 
+
 ##############################################################################################################################
 ##############################################################################################################################
 #' @title Check to See if NCO is on the system
@@ -1096,273 +963,70 @@ mosaic_surfaces <- function(type_string) {
 #' @export
 # process_survey_tiles(survey_location, AOI or TILE_ID) {
 process_survey_tiles = function(survey_location, AOI or TILE_ID) {
-  # elevatr_aws_wrapper_for_tile
-  # aggregate_eHydro_footprints_within_AOI
-  # append_eHydro_files_to_AOI
-  # mosaic_bathy_surface
-  # mosaic_bathy_terrain_surface
-  # mosaic_surfaces
-  
-  
-  # elevatr_aws_wrapper_for_tile('G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01',86647)
-  # breaks: 79647
-  # tile_fishnet <- aggregate_eHydro_footprints_within_AOI(xx$survey_tiles[xx$survey_tiles$tile_id==id,])
-  # mapview::mapview(list(xx$survey_tiles[xx$survey_tiles$tile_id==id,],tile_fishnet,xx$eHydro_survey_footprints %>% sf::st_filter(tile_fishnet)))
-  # mapview::mapview(xx$survey_tiles[xx$survey_tiles$tile_id==id]+tile_fishnet)
-  # tile_fishnet_survey <- append_eHydro_files_to_AOI(tile_fishnet)
-  # tile_fishnet_survey
+
 }
 process_survey_tiles(survey_location, AOI or TILE_ID)
 
 ##############################################################################################################################
 ##############################################################################################################################
-#' Appends all viable hec ras 1D cross sections into single database
-#' @description Point at a directory to establish (create) the folder and base data needed for eHydro to run
-#' @param my_location Path on local system
-#' @return list object
+#' @title Check to See if NCO is on the system
+#' @description NCO is a fantastic open source tool for working with NetCDF files.
+#' It can be downloaded from here: http://nco.sourceforge.net/#Source
+#' @return a boolean condition
+#' @importFrom sys exec_internal
+#' @examples
+#' check_nco()
 #' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
-#' Blends point clouds together as vertial bins (replace part of one image with another
-#' @description Point at a directory to establish (create) the folder and base data needed for eHydro to run
-#' @param my_location Path on local system
-#' @return list object
-#' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
-#' @importFrom  rhdf5 
-#' @importFrom  stringi stri_sub
-#' rhdf5
-#' BiocManager
-bulk_generate_hecras_geo(survey_location, HEC_path) {
-  
-  # survey_location <- 'G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01'
-  # survey_location <- 'c:/Users/jimma/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01'
-  
-  if(file.exists(file.path(survey_path,'survey_source.csv'))) {
-    # Load csv
-    hec_geo_files_old <- read.table(file = file.path(survey_path,'survey_source.csv'))
-  }
-  source_crosswalk <- 1
-  
-  HEC_PATH <- NULL
-  
-  # hec_geo_files <- list()
-  hec_geo_files <- data.frame(g=c('<NA>'),geo=c('<NA>'),proj=c('<NA>'))
-  i <- 1
-  
+parse_HECRAS_G_files(survey_location, HEC_path) {
+  survey_location <- 'G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01'
+  HEC_path <- NULL
+
+  hec_geo_files <- data.frame('geo'=c('test'),'proj'=c('test'))
+  i=2
+
   print('Processing HECRAS surveys')
   if(is.null(HEC_PATH)) {
     HEC_PATH <- survey_location
   }
-  
-  
+
   files <- list.files(path = HEC_PATH,full.names = T,recursive = T)
   for(file in files) {
-    # file <- files[190]
-    
-    # .g base
-    if(stringr::str_detect(stringi::stri_sub(file,-3,-3), "(?i)g")) {
-      i <- i+1
-      hec_geo_files[i,]$g <- file
-      
-      if(file.exists(paste0(file,'.hdf'))) {
-        
-        hec_geo_files[i,]$geo <- paste0(file,'.hdf')
-        proj_files <- list.files(path = dirname(file),pattern = '*\\.prj',full.names = T,recursive = T)
-        
-        for(proj_file in proj_files){
-          if(!stringi::stri_detect_fixed(stringi::stri_sub(readLines(file(proj_file,"r"),n=1),0,15),"=")) {
-            hec_geo_files[i,]$proj <- proj_file
-          }
+    if((stringi::stri_sub(file,-3,-3) == 'g') | (stringi::stri_sub(file,-3,-3) == 'G')) {
+
+      # edge case: more than one projection in a model...
+      proj_files <- list.files(path = dirname(file),pattern = '*\\.prj',full.names = T,recursive = T)
+      for(proj_file in proj_files){
+        if(!stringi::stri_detect_fixed(stringi::stri_sub(readLines(file(proj_file,"r"),n=1),0,15),"=")){
+          hec_geo_files[i,]$geo <- file
+          hec_geo_files[i,]$proj <- proj_file
+          i=i+1
         }
       }
-      
     }
   }
   hec_geo_files <- hec_geo_files[-1,]
-  rownames(hec_geo_files) <- 1:nrow(hec_geo_files)
-  print(paste("Number of g** (geometry) files found:", nrow(hec_geo_files)))
-  
-  hec_geo_files <- tidyr::drop_na(hec_geo_files,geo)
-  print(paste("Number of g**.hdf (geometry) files found:", nrow(hec_geo_files)))
-  
-  hec_geo_files <- hec_geo_files[complete.cases(hec_geo_files), ]
-  rownames(hec_geo_files) <- 1:nrow(hec_geo_files)
-  print(paste("Number of g**.hdf (geometry) files with a projection:", nrow(hec_geo_files)))
-  
-  print(hec_geo_files)
-  write.table(hec_geo_files,file = file.path(survey_path,'survey_source.csv'))
-  # sink('G:/Dropbox/root/tools/myip.txt')
-  # print(hec_geo_files)
-  # sink()
-  
-  for(hec_geo_index in 1:nrow(hec_geo_files)) {
-    # hec_geo_index <- 1
-    source_name <- rownames(hec_geo_files[hec_geo_index,])
-    geo_file_path <- hec_geo_files[hec_geo_index,]$geo
-    # geo_file_path <- hec_geo$geo
-    
-    # hf <- rhdf5::H5Fopen(hec_geo$geo)
-    
-    n1 <- rhdf5::h5read(geo_file_path,'Geometry/Cross Sections/Polyline Points')
-    n2 <- rhdf5::h5read(geo_file_path,'Geometry/Cross Sections/Polyline Parts')
-    n3 <- rhdf5::h5read(geo_file_path,'Geometry/Cross Sections/Attributes')
-    n4 <- rhdf5::h5read(geo_file_path,'Geometry/Cross Sections/River Names')
-    n5 <- rhdf5::h5read(geo_file_path,'Geometry/Cross Sections/Reach Names')
-    n6 <- rhdf5::h5read(geo_file_path,'Geometry/Cross Sections/River Stations')
-    n7 <- rhdf5::h5read(geo_file_path,"Geometry/Cross Sections/Manning's n Info")
-    n8 <- rhdf5::h5read(geo_file_path,"Geometry/Cross Sections/Manning's n Values")
-    n9 <- rhdf5::h5read(geo_file_path,"Geometry/Cross Sections/Station Elevation Info")
-    n10 <- rhdf5::h5read(geo_file_path,"Geometry/Cross Sections/Station Elevation Values")
-    # Create a list of  number of points per each stream line
-    
-    list_points_per_cross_section_line <- n2[2,]
-    
-    if(nrow(n3) > 0){
-      list_river_name <- n3$River
-      list_reach_name <- n3$Reach
-      list_station <- n3$Name
-    } else {
-      list_river_name <- n4
-      list_reach_name <- n5
-      list_station <- n6
-    }
-    
-    ####################################
-    ####################################
-    ####################################
-    cross_section_lines <- data.frame(matrix(ncol=6,nrow=0, dimnames=list(NULL, c("geometry", "xid","stream_stn", "river","reach","ras_path"))))
-    
-    # Loop through the cross section lines and create GeoDataFrame
-    int_startPoint <- 1
-    
-    for(j in 1:length(list_points_per_cross_section_line)) {
-      int_endPoint <- int_startPoint + list_points_per_cross_section_line[j]-1
-      #for(k in 1:nlist(t(n1[,int_startPoint:(int_startPoint+int_numPnts)])) )
-      cross_section_lines[j,]$geometry <- list(t(n1[,int_startPoint:int_endPoint]))
-      cross_section_lines[j,]$xid <- j
-      cross_section_lines[j,]$stream_stn <- list_station[j]
-      cross_section_lines[j,]$river <- list_river_name[j]
-      cross_section_lines[j,]$reach <- list_reach_name[j]
-      cross_section_lines[j,]$ras_path <- geo_file_path
-      
-      int_startPoint <- int_endPoint + 1
-    }
-    # cross_section_lines
-    
-    # line string planer form of geometry
-    ls_geo_extract <- function(x) {
-      x_coords <- x$geometry[[1]][,1]
-      y_coords <- x$geometry[[1]][,2]
-      len <- length(x_coords)
-      xid <- rep(x$xid,length.out=len)
-      stream_stn <- rep(x$stream_stn,length.out=len)
-      river <- rep(x$river,length.out=len)
-      reach <- rep(x$reach,length.out=len)
-      ras_path <- rep(x$ras_path,length.out=len)
-      
-      sf_return <- sfheaders::sf_linestring(
-        obj = data.frame(x_coords,y_coords,xid,stream_stn,river,reach,ras_path)
-        , x = "x_coords"
-        , y = "y_coords"
-        , linestring_id = "xid"
-        , keep = TRUE
-      ) %>% sf::st_sf() %>%
-        sf::st_cast()
-      return(sf_return)
-    }
-    sf_cross_section_lines <- c()
-    for(h in 1:nrow(cross_section_lines)) {
-      sf_cross_section_lines <- rbind(sf_cross_section_lines,ls_geo_extract(cross_section_lines[h,]))
-    }
-    
-    # normalize projection?
-    # write projectionless shapefile
-    # move proj file to new location
-    # rename file
-    # load cross sections
-    # project to new proj sf::st_transform(xx$survey_tiles, sf::st_crs(6349))
-    # write out as new shapefile
-    
-    # sf_cross_section_lines
-    # mapview::mapview(sf_cross_section_lines)
-    
-    ####################################
-    ####################################
-    ####################################
-    
-    point_database <- c()
-    
-    for(t in 1:ncol(n2)) {
-    # for(t in 1:100) {
-      print(paste("processing",t))
-      str_current_xs <- sf_cross_section_lines[t,]$reach
-      geom_xs_linestring = sf_cross_section_lines[t,]$geometry
-      
-      int_prof_xs_start_pnt = n9[1,t]
-      int_prof_pnts_in_xs = n9[2,t]
-      int_prof_xs_end_pnt = int_prof_xs_start_pnt + int_prof_pnts_in_xs
-      list_xs_station = n10[1,int_prof_xs_start_pnt:int_prof_xs_end_pnt]
-      list_xs_elevation = n10[2,int_prof_xs_start_pnt:int_prof_xs_end_pnt]
-      
-      int_prof_xs_n_start_pnt = n7[1,t]
-      int_prof_n_pnts_in_xs = n7[2,t]
-      int_prof_xs_n_end_pnt = int_prof_xs_n_start_pnt + int_prof_n_pnts_in_xs
-      list_xs_n_station = n8[1,int_prof_xs_n_start_pnt:int_prof_xs_n_end_pnt]
-      list_xs_n = n8[2,int_prof_xs_n_start_pnt:int_prof_xs_n_end_pnt]
-      
-      station_elevation_data <- data.frame(xid_d=unlist(list_xs_station),z=unlist(list_xs_elevation))
-      station_n_data <- data.frame(xid_d=unlist(list_xs_n_station),n=unlist(list_xs_n))
-      
-      xs_point_data <- merge(x=station_elevation_data,y=station_n_data,by="xid_d",all.x=TRUE)
-      xs_point_data <- xs_point_data %>% tidyr::fill("n", .direction = "down")
-      
-      pt_xid_length <- sf::st_length(geom_xs_linestring)
-      for(point_index in 1:nrow(xs_point_data)) {
-        stn <- xs_point_data[point_index,1]
-        ratio <- stn / pt_xid_length
-        pt <- lwgeom::st_linesubstring(geom_xs_linestring, from = 0, to = ratio) %>% lwgeom::st_endpoint()
-        pt_x <- pt[[1]][1]
-        pt_y <- pt[[1]][2]
-        pt_z <- xs_point_data[point_index,2]
-        pt_n <- xs_point_data[point_index,3]
-        pt_b <- "test"
-        point_database <- rbind(point_database,
-                                data.frame(xid=t,
-                                           xid_length=pt_xid_length,
-                                           xid_d=stn,
-                                           x=pt_x,
-                                           y=pt_y,
-                                           z=pt_z,
-                                           n=pt_n,
-                                           source=source_name))
-      }
-    }
-    
-    utils::write.table(point_database,file = file.path(dirname(file.path(hec_geo_files[hec_geo_index,]$g)),'ehydro_ras_data.csv'))
-  }
-  
-  print('mergeing data')
-  step_start_time <- Sys.time()
-  ras_1D_survey_files <- list.files(path = survey_location,pattern = "ehydro_ras_data.csv", full.names = TRUE, recursive = TRUE)
-  ras_1D_survey = list(length=nrow(ras_1D_survey_files))
-  
-  fn_open_csv <- function(file_path) { return( utils::read.table(file_path) )}
-  ras_1D_survey <- lapply(ras_1D_survey_files,fn_open_csv)
-  ras_1D_survey <- do.call(rbind, ras_1D_survey)
-  utils::write.table(ras_1D_survey,file = file.path(survey_location,'RAS_1D_data.csv'))
-  return(TRUE)
-  # step_run_time <- difftime(Sys.time(), step_start_time, units = "mins")
-  # print(paste0("cwms data extracted, merged, and projected in ",round(step_run_time, digits = 2), " minutes"))
-  # return(cwms_cross_sections)
-  # 
-  # find all shapefiles and merge database
-  # dir.create()
-  # write all shapefiles
-  # write source crosswalk
-}
+  hec_geo_files <- hec_geo_files[!duplicated(hec_geo_files[ , c("geo")]), ]
 
+  # # smarter Error handling (what if this survey has already been run?)
+  # for(entry in hec_geo_files)
+
+  rownames(hec_geo_files) <- 1:nrow(hec_geo_files)
+
+  # Edge case: Alert for models that don't have a proj...
+  for(hec_geo in hec_geo_files) {
+    # locate all cross section data
+    proj_file <- hec_geo_files[1,]$geo
+    g_file_full_text <- readLines(file(proj_file,"r"))
+
+      # Transform line geom to lines
+      # transform station/elevation to points
+      # use station to place elevation along line
+      # project line to 6349
+    # Stick geom in same folder as "eHydRo_cross_sections.shp" (see smarter error handling above)
+  }
+
+}
+parse_HECRAS_G_files('G:/Dropbox/root/projects/GID_Inland_Hydrofabric/eHydRo/survey_2021_11_01')
 
 ##############################################################################################################################
 ##############################################################################################################################
@@ -1394,83 +1058,6 @@ cut_cross_sections(survey_location, lines, export) {
 
 ##############################################################################################################################
 ##############################################################################################################################
-
-#' pull_cross_sections_from_ the merged ras shapefile for each input line based on the closest feature to the specified distance_by_comid_distance
-#' @description Point at a directory to load in base establish (create) the folder and base data needed for eHydro to run or load in a past processed 
-#' database Based on the presence of another active survey snapshot (defined as an established ehdroor not
-#' @param my_location Path on local system
-#' @return list object containing the spatial footprints of surveys and a list of tiles over which to process
-#' @export
-#' @importFrom  httr GET write_disk
-#' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
-
-pull_cross_section_points_from_ras_by_comid_distance <- function(survey_path,list_of_comids, distance_along_line) {
-  # list_of_comids <- ras_enabled_coms
-  # distance_along_line <- 0.5
-  
-  print('Generating point based cross sections')
-  step_start_time <- Sys.time()
-  
-  ras_database <- utils::read.table(file.path(survey_path,'RAS_1D_data.csv'))
-  ras_dbase_line <- ras_store_to_line(ras_database)
-  # stream_lines <- list_of_comids
-  # mapview::mapview(list(list_of_comids,ras_xs_database))
-  
-  comid_select_points <- list(length=nrow(list_of_comids))
-  for (i in 1:nrow(list_of_comids)) {
-    comid_select_points[[i]] <- rgeos::gInterpolate(as(list_of_comids[i,], "Spatial"), d=distance_along_line, normalized = TRUE) %>%
-      sf::st_as_sf()
-  }
-  comid_select_points <- sf::st_as_sf(data.table::rbindlist(comid_select_points)) %>%
-    sf::st_set_crs(sf::st_crs(6349))
-  ras_line_index <- sf::st_nearest_feature(comid_select_points, ras_dbase_line)
-
-  ras_pt_list <- list(length=nrow(ras_line_index))
-  for(xs_index in 1:length(ras_line_index)) {
-    # xs_index <- 41
-    
-    xs <- ras_line_index[xs_index]
-    ras_dbase_selected_line <- ras_dbase_line[xs,]
-    ras_dbase_selected_line$xid_length <- as.numeric(sf::st_length(sf::st_zm(ras_dbase_selected_line, drop = TRUE, what = "ZM")))
-    ras_dbase_selected_line$comid <- list_of_comids[xs_index,]$COMID
-    
-    # find the midpoint (error handle) and add that distance to the cross section 
-    cross_section_midpoint <- sf::st_intersection(ras_dbase_selected_line, list_of_comids[list_of_comids$COMID==ras_dbase_selected_line$comid,])
-    # mapview::mapview(list(ras_dbase_selected_line,list_of_comids[list_of_comids$COMID==ras_dbase_selected_line$comid,]))
-    # mapview::mapview(list(cross_section_midpoint,ras_dbase_selected_line,list_of_comids[list_of_comids$COMID==ras_dbase_selected_line$comid,]))
-    if(nrow(cross_section_midpoint)==0) {
-      print('cross sections do not intersect here')
-      next
-    }
-    
-    # add attributes about cross section relative to comid
-    ras_dbase_selected_line$comid_rel_dist_ds <- rgeos::gProject(as(list_of_comids[list_of_comids$COMID==ras_dbase_selected_line$comid,],"Spatial"), as(sf::st_cast(cross_section_midpoint,"POINT"),"Spatial"), normalized=TRUE)[[1]]
-    ras_dbase_selected_line_points <- sf::st_cast(ras_dbase_selected_line,"POINT")
-   
-    relative_distance_along_line_to_midpoint <- rgeos::gProject(as(sf::st_zm(ras_dbase_selected_line, drop = TRUE, what = "ZM"),"Spatial"), as(sf::st_cast(cross_section_midpoint,"POINT"),"Spatial"), normalized=TRUE)
-    ras_dbase_selected_line_points$xid_rel_dist <- rgeos::gProject(as(sf::st_zm(ras_dbase_selected_line, drop = TRUE, what = "ZM"),"Spatial"), as(sf::st_cast(sf::st_zm(ras_dbase_selected_line, drop = TRUE, what = "ZM"),"POINT"),"Spatial"), normalized=TRUE)
-    
-    ras_dbase_selected_line_points$xid_d <- (ras_dbase_selected_line_points$xid_length * ras_dbase_selected_line_points$xid_rel_dist) - (relative_distance_along_line_to_midpoint * ras_dbase_selected_line_points$xid_length)
-    
-    ras_dbase_selected_line_points$n <- ras_database[ras_database$xid==xs,]$n
-    ras_dbase_selected_line_points$source <- ras_database[ras_database$xid==xs,]$source
-    
-    ras_xs_point_list[[xs_index]] <- ras_dbase_selected_line_points
-  }
-  
-  ras_xs_point_list = data.table::rbindlist(ras_xs_point_list)
-  row.names(ras_xs_point_list) <- NULL
-  
-  ras_xs_point_list$x <- unlist(map(ras_xs_point_list$geometry,1))
-  ras_xs_point_list$y <- unlist(map(ras_xs_point_list$geometry,2))
-  ras_xs_point_list$z <- unlist(map(ras_xs_point_list$geometry,3))
-  
-  return(ras_xs_point_list)
-}
-
-
-##############################################################################################################################
-##############################################################################################################################
 #' @title Check to See if NCO is on the system
 #' @description NCO is a fantastic open source tool for working with NetCDF files.
 #' It can be downloaded from here: http://nco.sourceforge.net/#Source
@@ -1479,10 +1066,10 @@ pull_cross_section_points_from_ras_by_comid_distance <- function(survey_path,lis
 #' @examples
 #' check_nco()
 #' @export
-export_surveys = function(survey_location,data) {
-  file <- file.path(survey_location,paste0('eHydro_ned_cross_sections_',gsub("-","_",Sys.Date()),'.nc'))
-  # cross_section_points <- cross_section_points %>% sf::st_drop_geometry()
-  cross_section_points <- data
+export_surveys = function(survey_location) {
+  file <- file.path(snapshot_dir,paste0('eHydro_ned_cross_sections_',gsub("-","_",Sys.Date()),'.nc'))
+  cross_section_points <- cross_section_points %>% sf::st_drop_geometry()
+  cross_section_points <- export_dbase
   nc <- RNetCDF::create.nc(file)
   RNetCDF::dim.def.nc(nc, "xid", unlim=TRUE)
 
@@ -1494,7 +1081,6 @@ export_surveys = function(survey_location,data) {
   RNetCDF::var.def.nc(nc, "x", "NC_DOUBLE", 0)
   RNetCDF::var.def.nc(nc, "y", "NC_DOUBLE", 0)
   RNetCDF::var.def.nc(nc, "z", "NC_DOUBLE", 0)
-  RNetCDF::var.def.nc(nc, "n", "NC_DOUBLE", 0)
   RNetCDF::var.def.nc(nc, "source", "NC_INT", 0)
 
   ##  Put some _FillValue attributes
@@ -1506,7 +1092,6 @@ export_surveys = function(survey_location,data) {
   RNetCDF::att.put.nc(nc, "x", "_FillValue", "NC_DOUBLE", -99999.9)
   RNetCDF::att.put.nc(nc, "y", "_FillValue", "NC_DOUBLE", -99999.9)
   RNetCDF::att.put.nc(nc, "z", "_FillValue", "NC_DOUBLE", -99999.9)
-  RNetCDF::att.put.nc(nc, "n", "_FillValue", "NC_DOUBLE", -99999.9)
   RNetCDF::att.put.nc(nc, "source", "_FillValue", "NC_INT", -99999.9)
 
   ##  Put all  the data:
@@ -1518,7 +1103,6 @@ export_surveys = function(survey_location,data) {
   RNetCDF::var.put.nc(nc, "x", cross_section_points$x)
   RNetCDF::var.put.nc(nc, "y", cross_section_points$y)
   RNetCDF::var.put.nc(nc, "z", cross_section_points$z)
-  RNetCDF::var.put.nc(nc, "n", cross_section_points$n)
   RNetCDF::var.put.nc(nc, "source", cross_section_points$source)
 
   RNetCDF::att.put.nc(nc, "NC_GLOBAL", "title", "NC_CHAR", "Natural cross section data for inland routing task")
@@ -1552,16 +1136,13 @@ export_surveys = function(survey_location,data) {
   RNetCDF::att.put.nc(nc, "z", "interpretation", "NC_CHAR", "vertical elevation (meters, positive up)")
   RNetCDF::att.put.nc(nc, "z", "unit", "NC_CHAR", "meters")
   RNetCDF::att.put.nc(nc, "z", "projection", "NC_CHAR", "epsg:6349")
-  RNetCDF::att.put.nc(nc, "n", "title", "NC_CHAR", "n")
-  RNetCDF::att.put.nc(nc, "n", "interpretation", "NC_CHAR", "mannings n of the point")
-  RNetCDF::att.put.nc(nc, "n", "unit", "NC_CHAR", "unitless")
   RNetCDF::att.put.nc(nc, "source", "title", "NC_CHAR", "source")
   RNetCDF::att.put.nc(nc, "source", "interpretation", "NC_CHAR", "The source of the data: 1=eHydro, 2=CWMS. 3=RFC HEC-RAS Model")
 
   RNetCDF::close.nc(nc)
   unlink(nc)
 }
-
+export_surveys
 
 ##############################################################################################################################
 ##############################################################################################################################
@@ -1569,6 +1150,28 @@ export_surveys = function(survey_location,data) {
 
 
 
+
+
+#///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+# ----- Merge CWMS data -------------------------------------------------------------------------------
+#///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+generate_merged_CWMS_survey <- function() {
+  print('mergeing cwms data')
+  step_start_time <- Sys.time()
+  cwms_survey_files <- list.files(path = file.path(snapshot_dir,'cwms','tmp'),pattern = "z.shp", full.names = TRUE, recursive = TRUE)
+  cwms_survey = list(length=nrow(cwms_survey_files))
+
+  fn_open_shapefiles <- function(file_path) { return( sf::read_sf(file_path) )}
+  cwms_survey <- lapply(cwms_survey_files,fn_open_shapefiles)
+  cwms_cross_sections <- do.call(rbind, cwms_survey)
+  cwms_cross_sections <- sf::st_transform(cwms_cross_sections, sf::st_crs(6349))
+  step_run_time <- difftime(Sys.time(), step_start_time, units = "mins")
+  print(paste0("cwms data extracted, merged, and projected in ",round(step_run_time, digits = 2), " minutes"))
+  return(cwms_cross_sections)
+}
+# cwms_cross_section_data <- generate_merged_CWMS_survey()
+##############################################################################################################################
+##############################################################################################################################
 
 
 
@@ -1740,7 +1343,6 @@ pull_cross_sections_from_cwms_by_comid <- function(list_of_comids) {
   print('merging cwms points')
   # cwms_extract_point_list = do.call(rbind, cwms_extract_point_list)
   cwms_extract_point_list = data.table::rbindlist(cwms_extract_point_list)
-  row.names(cwms_cross_section_points) <- NULL
   return(cwms_extract_point_list)
 }
 

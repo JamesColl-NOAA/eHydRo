@@ -1,19 +1,17 @@
-#' establishes survey directory
-#' @description Point at a directory to load in base establish (create) the folder and base data needed for eHydro to run or load in a past processed 
-#' database Based on the presence of another active survey snapshot (defined as an established ehdroor not
+#' Blends point clouds together as vertial bins (replace part of one image with another
+#' @description Point at a directory to establish (create) the folder and base data needed for eHydro to run
 #' @param my_location Path on local system
-#' @return list object containing the spatial footprints of surveys and a list of tiles over which to process
+#' @return list object
 #' @export
 #' @importFrom  httr GET write_disk
 #' @importFrom  sf st_as_sf st_set_crs st_as_sfc st_bbox read_sf st_make_valid st_transform st_crs st_filter st_make_grid st_write
 
 establish_survey_dir = function(my_location) {
+ 
+   xx <- list()
   
-  xx <- list()
-  
-  # Process or load
   if(!file.exists(file.path(my_location, "processing_tiles.shp"))) {
-    print('-- No eHydro survey found, processing base data --')
+    print('-- No eHydro survey found, processing base 6data --')
     eHydro_survey_url <- "https://opendata.arcgis.com/api/v3/datasets/80a394bae6b547f1b5788074261e11f1_0/downloads/data?format=shp&spatialRefId=4326"
     date_stamp <- gsub("-","_",Sys.Date())
     snapshot_dir <- file.path(my_location,paste0("survey_",date_stamp))
@@ -49,8 +47,6 @@ establish_survey_dir = function(my_location) {
     xx$survey_tiles$tile_id <- 1:nrow(xx$survey_tiles)
     sf::st_write(xx$survey_tiles, file.path(snapshot_dir,"processing_tiles.shp"))
     
-    # Download needed input data (how to share these?)
-    
   } else {
     print('-- Existing survey in place, loading data --')
     xx$eHydro_survey_footprints <- sf::read_sf(file.path(my_location, "SurveyJob.shp")) %>%
@@ -58,7 +54,6 @@ establish_survey_dir = function(my_location) {
       sf::st_transform(sf::st_crs(6349))
     xx$survey_tiles <- sf::read_sf(file.path(my_location, "processing_tiles.shp"))
     
-	  # How best to share these?
     # xx$NWM_channel_routelink <- ncdf4::nc_open(file.path(my_location,"RouteLink_CONUS.nc"))
     # xx$NWM_channels <- ncdf4::nc_open(file.path(my_location,"base_data","RouteLink_CONUS.nc"))
   }
